@@ -1,0 +1,29 @@
+K 25
+svn:wc:ra_dav:version-url
+V 29
+/svn/!svn/ver/45/trunk/douban
+END
+client.py
+K 25
+svn:wc:ra_dav:version-url
+V 39
+/svn/!svn/ver/34/trunk/douban/client.py
+END
+__init__.py
+K 25
+svn:wc:ra_dav:version-url
+V 41
+/svn/!svn/ver/45/trunk/douban/__init__.py
+END
+service.py
+K 25
+svn:wc:ra_dav:version-url
+V 40
+/svn/!svn/ver/45/trunk/douban/service.py
+END
+oauth.py
+K 25
+svn:wc:ra_dav:version-url
+V 38
+/svn/!svn/ver/21/trunk/douban/oauth.py
+END

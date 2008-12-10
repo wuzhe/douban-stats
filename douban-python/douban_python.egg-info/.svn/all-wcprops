@@ -1,0 +1,35 @@
+K 25
+svn:wc:ra_dav:version-url
+V 45
+/svn/!svn/ver/24/trunk/douban_python.egg-info
+END
+SOURCES.txt
+K 25
+svn:wc:ra_dav:version-url
+V 57
+/svn/!svn/ver/21/trunk/douban_python.egg-info/SOURCES.txt
+END
+top_level.txt
+K 25
+svn:wc:ra_dav:version-url
+V 58
+/svn/!svn/ver/2/trunk/douban_python.egg-info/top_level.txt
+END
+PKG-INFO
+K 25
+svn:wc:ra_dav:version-url
+V 54
+/svn/!svn/ver/22/trunk/douban_python.egg-info/PKG-INFO
+END
+dependency_links.txt
+K 25
+svn:wc:ra_dav:version-url
+V 65
+/svn/!svn/ver/2/trunk/douban_python.egg-info/dependency_links.txt
+END
+requires.txt
+K 25
+svn:wc:ra_dav:version-url
+V 58
+/svn/!svn/ver/24/trunk/douban_python.egg-info/requires.txt
+END

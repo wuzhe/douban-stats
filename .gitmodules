@@ -1,0 +1,3 @@
+[submodule "douban-python"]
+	path = douban-python
+	url = douban-python
