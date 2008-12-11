@@ -237,6 +237,7 @@ def main():
     new_reqs = 0
     total_reqs = 0
     count = 0
+    queue_length = len(queue)
     while queue:
         curr_uid = queue.popleft()
         if curr_uid in visited: continue
@@ -268,18 +269,20 @@ def main():
         user.store_relations()
         users_in_db |= new_users
         conn.commit()
+        visited.add(curr_uid)
+        queue.extend(new_users)
 
         new_reqs = user.api_req_count
         total_reqs += new_reqs
         count += 1
-        visited.add(curr_uid)
-        queue.extend(new_users)
-
+        new_queue_length = len(queue)
+        queue_delta = new_queue_length - queue_length
+        queue_length = new_queue_length
         nowp = datetime.datetime.now().isoformat(' ')
-        print "[%s] V:%s Q:%s DB:%s(+%s) REQ:%s(+%s) RF:%s VF:%s ETR:%s U:%s(%s)" % \
-              (nowp, len(visited), len(queue), len(users_in_db), len(new_users),
-               total_reqs, new_reqs, req_freq, visit_freq, etr, user.data[1],
-               user.data[3])
+        print "[%s] V:%d Q:%d(%+d)\tDB:%d(%+d)\tREQ:%d(%+s)\tRF:%d\tVF:%d\tETR:%d\tU:%s(%s)" % \
+              (nowp, len(visited), queue_length, queue_delta, len(users_in_db),
+               len(new_users), total_reqs, new_reqs, req_freq, visit_freq, etr,
+               user.data[1], user.data[3])
 
 if __name__ == "__main__":
     main()
