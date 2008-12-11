@@ -27,7 +27,7 @@ VISITED_PATH = os.path.normpath('../visited_users.pkl') # pickle
 SEED_USERS = (1000001, 2461197, 1021991)
 
 # Min time interval between reqs, 40 reqs/min by douban API TOS
-REQ_INTERVAL = 60.0/1000
+REQ_INTERVAL = 60.0/100
 
 # max-results per page in douban API, currently API limit it to 50
 MAX_RESULTS = 50
@@ -237,15 +237,20 @@ def main():
     total_reqs = 0
     count = 0
     queue_length = len(queue)
-    last = time.time()
     while queue:
         curr_uid = queue.popleft()
         if curr_uid in visited: continue
 
+        last = time.time()
+
+        user = User(cursor, client, curr_uid)
+        uid = user.get_data()[0]
+        users_in_db.add(uid)
+        user_users = (user.get_friends() | user.get_follows())
+
         # Update the frequency stats
-        now = time.time()
+        now = time.time() # get time just after API requests
         duration = now - last
-        last = now
         # API request frequency (per min)
         req_freq = int(float(new_reqs) / duration * 60)
         # Visit frequency (per hour)
@@ -253,10 +258,8 @@ def main():
         # Estimated time remaining (in hours)
         etr = int((TOTAL_USERS - len(visited)) / visit_freq)
 
-        user = User(cursor, client, curr_uid)
-        uid = user.get_data()[0]
-        users_in_db.add(uid)
-        new_users = (user.get_friends() | user.get_follows()) - users_in_db
+        # CPU heavy operations
+        new_users = user_users - users_in_db
         user.store_users(new_users)
         user.store_relations()
         users_in_db |= new_users
