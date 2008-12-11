@@ -27,7 +27,7 @@ VISITED_PATH = os.path.normpath('../visited_users.pkl') # pickle
 SEED_USERS = (1000001, 2461197, 1021991)
 
 # Min time interval between reqs, 40 reqs/min by douban API TOS
-REQ_INTERVAL = 60.0/40
+REQ_INTERVAL = 60.0/1000
 
 # max-results per page in douban API, currently API limit it to 50
 MAX_RESULTS = 50
@@ -210,7 +210,6 @@ def main():
 
     # Set up the exit function
     def save_state(conn, cursor, queue, visited):
-        conn.commit()
         if queue:
             print 'Saving user queue (length: %s) in "%s"' % \
                   (len(queue), USER_PATH)
@@ -277,9 +276,10 @@ def main():
         queue.extend(new_users)
 
         nowp = datetime.datetime.now().isoformat(' ')
-        print "[%s] V:%s Q:%s DB:%s REQ:%s(+%s) RF:%s VF:%s ETR:%s U:%s(%s)" % \
-              (nowp,len(visited), len(queue), len(users_in_db), total_reqs,
-               new_reqs, req_freq, visit_freq, etr, user.data[1],user.data[3])
+        print "[%s] V:%s Q:%s DB:%s(+%s) REQ:%s(+%s) RF:%s VF:%s ETR:%s U:%s(%s)" % \
+              (nowp, len(visited), len(queue), len(users_in_db), len(new_users),
+               total_reqs, new_reqs, req_freq, visit_freq, etr, user.data[1],
+               user.data[3])
 
 if __name__ == "__main__":
     main()
