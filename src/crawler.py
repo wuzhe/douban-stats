@@ -26,11 +26,14 @@ VISITED_PATH = os.path.normpath('../visited_users.pkl') # pickle
 # Seed users
 SEED_USERS = (1000001, 2461197, 1021991)
 
-# Min time interval between reqs
+# Min time interval between reqs, 40 reqs/min by douban API TOS
 REQ_INTERVAL = 60.0/40
 
 # max-results per page in douban API, currently API limit it to 50
 MAX_RESULTS = 50
+
+# Estimated number of user accounts in douban
+TOTAL_USERS = 2000000
 
 class User:
 
@@ -60,7 +63,7 @@ class User:
         now = time.time()
         if (now - self.last_req_time) < REQ_INTERVAL:
             sleep_time = REQ_INTERVAL - (now - self.last_req_time)
-            print "   zzZ: Sleep %s seconds" % sleep_time
+            print "    zzZ: Sleep %s seconds" % sleep_time
             time.sleep(sleep_time)
         self.last_req_time = now
 
@@ -206,41 +209,58 @@ def main():
         pkl_file.close()
 
     # Set up the exit function
-    def save_state(queue, visited):
+    def save_state(conn, cursor, queue, visited):
+        conn.commit()
         if queue:
-            print 'Saving user queue (length: %s) in "%s" ...' % \
+            print 'Saving user queue (length: %s) in "%s"' % \
                   (len(queue), USER_PATH)
             pkl_file = open(USER_PATH, 'wb')
             pickle.dump(queue, pkl_file)
             pkl_file.close()
         if visited:
-            print 'Saving visited set (length: %s) in "%s" ...' % \
+            print 'Saving visited set (length: %s) in "%s"' % \
                   (len(visited), VISITED_PATH)
             pkl_file = open(VISITED_PATH, 'wb')
             pickle.dump(visited, pkl_file)
             pkl_file.close()
-        conn.commit()
         cursor.execute("SELECT count(*) FROM users")
         count = cursor.fetchone()[0]
         conn.close()
         print "I have collected %d users so far." % count
-    atexit.register(save_state, queue, visited)
+    atexit.register(save_state, conn, cursor, queue, visited)
 
     client = douban.service.DoubanService(api_key=APIKEY)
     cursor.execute("SELECT uid FROM users")
     users_in_db = set([x[0] for x in cursor.fetchall()])
 
     # BFS crawl
+    start_time = time.time()
     new_reqs = 0
     total_reqs = 0
+    count = 0
     while queue:
         curr_uid = queue.popleft()
         if curr_uid in visited: continue
+        time_passed = time.time() - start_time
 
-        nowp = datetime.datetime.now().isoformat(' ')
-        print "[%s] VISITED:%s QUEUE:%s DB:%s API:%s(+%s) Processing UID %s" % \
-              (nowp, len(visited), len(queue), len(users_in_db),
-               total_reqs, new_reqs, curr_uid)
+        # clear the counter every 2 hours
+        if time_passed > 3600*2:
+            print "Clear the counter for rate/visit caculation"
+            start_time = time.time()
+            count = 0
+            total_reqs= 0
+            new_reqs = 0
+            time_passed = 1
+        # API request frequency (per min)
+        req_freq = int((total_reqs + new_reqs) / time_passed * 60)
+        # Visit frequency (per hour)
+        visit_freq = int(count / time_passed * 3600)
+        # Estimated time remaining (in hours)
+        if visit_freq > 0:
+            etr = int((TOTAL_USERS - len(visited)) / visit_freq)
+        else:
+            etr = 0
+
         user = User(cursor, client, curr_uid)
         uid = user.get_data()[0]
         users_in_db.add(uid)
@@ -252,8 +272,14 @@ def main():
 
         new_reqs = user.api_req_count
         total_reqs += new_reqs
+        count += 1
         visited.add(curr_uid)
         queue.extend(new_users)
+
+        nowp = datetime.datetime.now().isoformat(' ')
+        print "[%s] V:%s Q:%s DB:%s REQ:%s(+%s) RF:%s VF:%s ETR:%s U:%s(%s)" % \
+              (nowp,len(visited), len(queue), len(users_in_db), total_reqs,
+               new_reqs, req_freq, visit_freq, etr, user.data[1],user.data[3])
 
 if __name__ == "__main__":
     main()
