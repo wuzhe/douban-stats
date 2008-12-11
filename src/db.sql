@@ -1,5 +1,5 @@
 -- database schema
--- author: Wu Zhe <wu@madk.org
+-- author: Wu Zhe <wu@madk.org>
 
 CREATE TABLE IF NOT EXISTS users (
        uid INTEGER,

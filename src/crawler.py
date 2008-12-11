@@ -4,7 +4,7 @@
 #
 
 import douban.service
-import os, sys, sqlite3, atexit, pickle, datetime
+import os, sys, sqlite3, atexit, pickle, datetime, time
 from collections import deque
 
 def open_and_read(path):
@@ -21,17 +21,20 @@ SECRET = ''
 SQL_PATH = os.path.normpath('db.sql')
 DB_PATH = os.path.normpath('../data.db') # sqlite3 database
 USER_PATH = os.path.normpath('../user_queue.pkl') # pickle
+VISITED_PATH = os.path.normpath('../visited_users.pkl') # pickle
 
 # Seed users
-#SEED_USERS = [1000001, 1021991]
-SEED_USERS = [1584719, 1021991]
+SEED_USERS = (1000001, 2461197, 1021991)
 
-# max-results per page in douban API
-MAX_RESULTS = sys.maxint
+# Min time interval between reqs
+REQ_INTERVAL = 60.0/40
+
+# max-results per page in douban API, currently API limit it to 50
+MAX_RESULTS = 50
 
 class User:
 
-    # Map fields in `users' table to douban_python gdata api
+    # Map fields in `users' table to douban_python gdata api methods
     Mapper = (('uid', lambda x: int(x.GetSelfLink().href.split('/')[-1])),
               ('uid_text', lambda x: x.uid.text),
               ('location', lambda x: x.location.text),
@@ -48,8 +51,18 @@ class User:
         self.data = []
         self.rows_store = {}
         self.friend_pairs = []
-        self.contact_pairs = [] # actually means follows
+        self.contact_pairs = [] # actually means `follows' in database
         self.api_req_count = 0
+        self.last_req_time = time.time()
+
+    def _inc_req(self):
+        self.api_req_count += 1
+        now = time.time()
+        if (now - self.last_req_time) < REQ_INTERVAL:
+            sleep_time = REQ_INTERVAL - (now - self.last_req_time)
+            print "   zzZ: Sleep %s seconds" % sleep_time
+            time.sleep(sleep_time)
+        self.last_req_time = now
 
     def _store_userdata(self):
         self.db_cursor.execute("SELECT count(*) FROM users WHERE uid=?",
@@ -71,7 +84,7 @@ class User:
 
         # If not in database, get it via API and save it in database
         p = self.client.GetPeople('/people/%s' % self.uri_id)
-        self.api_req_count += 1
+        self._inc_req()
         fields = []
         for field, getter in User.Mapper:
             try:
@@ -83,11 +96,19 @@ class User:
         return self.data
 
     def _get_userlist_from_api(self, what):
-        feed = self.client.GetFriends('/people/%s/%s?max-results=%s' %
-                                      (self.uri_id, what, MAX_RESULTS))
-        self.api_req_count += 1
+        entries = []
+        start_i = 1
+        while start_i == 1 or len(f.entry) == 50:
+            f = self.client.GetFriends(
+                '/people/%s/%s?start-index=%s&max-results=%s' %
+                (self.uri_id, what, start_i, MAX_RESULTS)
+                )
+            self._inc_req()
+            entries.extend(f.entry)
+            start_i += MAX_RESULTS
+
         rows = []
-        for e in feed.entry:
+        for e in entries:
             fields = []
             for field, getter in User.Mapper:
                 try:
@@ -176,36 +197,50 @@ def main():
         queue = pickle.load(pkl_file)
         pkl_file.close()
 
+    # Get the visited user list
+    if not os.path.exists(VISITED_PATH):
+        visited = set([])
+    else:
+        pkl_file = open(VISITED_PATH)
+        visited = pickle.load(pkl_file)
+        pkl_file.close()
+
     # Set up the exit function
-    def save_queue(queue):
+    def save_state(queue, visited):
         if queue:
-            print 'Saving processing user queue (length: %s) in "%s" ...' % \
+            print 'Saving user queue (length: %s) in "%s" ...' % \
                   (len(queue), USER_PATH)
             pkl_file = open(USER_PATH, 'wb')
             pickle.dump(queue, pkl_file)
             pkl_file.close()
+        if visited:
+            print 'Saving visited set (length: %s) in "%s" ...' % \
+                  (len(visited), VISITED_PATH)
+            pkl_file = open(VISITED_PATH, 'wb')
+            pickle.dump(visited, pkl_file)
+            pkl_file.close()
+        conn.commit()
         cursor.execute("SELECT count(*) FROM users")
         count = cursor.fetchone()[0]
-        conn.commit()
         conn.close()
         print "I have collected %d users so far." % count
-    atexit.register(save_queue, queue=queue)
+    atexit.register(save_state, queue, visited)
 
-    # BFS
     client = douban.service.DoubanService(api_key=APIKEY)
     cursor.execute("SELECT uid FROM users")
     users_in_db = set([x[0] for x in cursor.fetchall()])
-    visited = set(users_in_db) # get a copy
+
+    # BFS crawl
     new_reqs = 0
     total_reqs = 0
     while queue:
         curr_uid = queue.popleft()
         if curr_uid in visited: continue
 
-        now = datetime.datetime.now().isoformat(' ')
-        print "%s, QUEUE:%s, DB:%s, API:%s(+%s), getting data for UID %s." % \
-              (now, len(queue), len(users_in_db), total_reqs, new_reqs,
-               curr_uid)
+        nowp = datetime.datetime.now().isoformat(' ')
+        print "[%s] VISITED:%s QUEUE:%s DB:%s API:%s(+%s) Processing UID %s" % \
+              (nowp, len(visited), len(queue), len(users_in_db),
+               total_reqs, new_reqs, curr_uid)
         user = User(cursor, client, curr_uid)
         uid = user.get_data()[0]
         users_in_db.add(uid)
