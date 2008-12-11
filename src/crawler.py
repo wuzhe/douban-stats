@@ -27,7 +27,7 @@ VISITED_PATH = os.path.normpath('../visited_users.pkl') # pickle
 SEED_USERS = (1000001, 2461197, 1021991)
 
 # Min time interval between reqs, 40 reqs/min by douban API TOS
-REQ_INTERVAL = 60.0/100
+REQ_INTERVAL = 60.0/200
 
 # max-results per page in douban API, currently API limit it to 50
 MAX_RESULTS = 50
@@ -56,7 +56,7 @@ class User:
         self.friend_pairs = []
         self.contact_pairs = [] # actually means `follows' in database
         self.api_req_count = 0
-        self.last_req_time = time.time()
+        self.last_req_time = time.time() - 1
 
     def _inc_req(self):
         self.api_req_count += 1
@@ -235,7 +235,6 @@ def main():
     # BFS crawl
     new_reqs = 0
     total_reqs = 0
-    count = 0
     queue_length = len(queue)
     while queue:
         curr_uid = queue.popleft()
@@ -243,13 +242,14 @@ def main():
 
         last = time.time()
 
+        # API heavy operations
         user = User(cursor, client, curr_uid)
         uid = user.get_data()[0]
         users_in_db.add(uid)
-        user_users = (user.get_friends() | user.get_follows())
+        user_users = user.get_friends() | user.get_follows()
 
         # Update the frequency stats
-        now = time.time() # get time just after API requests
+        now = time.time()
         duration = now - last
         # API request frequency (per min)
         req_freq = int(float(new_reqs) / duration * 60)
@@ -269,7 +269,6 @@ def main():
 
         new_reqs = user.api_req_count
         total_reqs += new_reqs
-        count += 1
         new_queue_length = len(queue)
         queue_delta = new_queue_length - queue_length
         queue_length = new_queue_length
