@@ -233,33 +233,25 @@ def main():
     users_in_db = set([x[0] for x in cursor.fetchall()])
 
     # BFS crawl
-    start_time = time.time()
     new_reqs = 0
     total_reqs = 0
     count = 0
     queue_length = len(queue)
+    last = time.time()
     while queue:
         curr_uid = queue.popleft()
         if curr_uid in visited: continue
-        time_passed = time.time() - start_time
 
-        # clear the counter every 2 hours
-        if time_passed > 3600*2:
-            print "Clear the counter for rate/visit caculation"
-            start_time = time.time()
-            count = 0
-            total_reqs= 0
-            new_reqs = 0
-            time_passed = 1
+        # Update the frequency stats
+        now = time.time()
+        duration = now - last
+        last = now
         # API request frequency (per min)
-        req_freq = int((total_reqs + new_reqs) / time_passed * 60)
+        req_freq = int(float(new_reqs) / duration * 60)
         # Visit frequency (per hour)
-        visit_freq = int(count / time_passed * 3600)
+        visit_freq = int(1.0 / duration * 3600)
         # Estimated time remaining (in hours)
-        if visit_freq > 0:
-            etr = int((TOTAL_USERS - len(visited)) / visit_freq)
-        else:
-            etr = 0
+        etr = int((TOTAL_USERS - len(visited)) / visit_freq)
 
         user = User(cursor, client, curr_uid)
         uid = user.get_data()[0]
@@ -279,7 +271,7 @@ def main():
         queue_delta = new_queue_length - queue_length
         queue_length = new_queue_length
         nowp = datetime.datetime.now().isoformat(' ')
-        print "[%s] V:%d Q:%d(%+d)\tDB:%d(%+d)\tREQ:%d(%+s)\tRF:%d\tVF:%d\tETR:%d\tU:%s(%s)" % \
+        print "[%s] V:%d Q:%d(%+d)\tDB:%d(%+d)\tREQ:%d(%+d)\tRF:%d\tVF:%d\tETR:%d\tU:%s(%s)" % \
               (nowp, len(visited), queue_length, queue_delta, len(users_in_db),
                len(new_users), total_reqs, new_reqs, req_freq, visit_freq, etr,
                user.data[1], user.data[3])
