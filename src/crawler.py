@@ -201,6 +201,7 @@ def main():
         cursor = conn.cursor()
     cursor.execute("PRAGMA cache_size = 20000;")
     cursor.execute("PRAGMA synchronous = NORMAL;")
+    cursor.execute("PRAGMA temp_store = MEMORY;")
 
     # Get the user list to crawl
     if not os.path.exists(USER_PATH):
@@ -260,6 +261,7 @@ def main():
         user_users = user.get_friends() | user.get_follows()
 
         # Update the frequency stats
+        new_reqs = user.api_req_count
         now = time.time()
         duration = now - last
         # API request frequency (per min)
@@ -278,7 +280,7 @@ def main():
         visited.add(curr_uid)
         queue.extend(new_users)
 
-        new_reqs = user.api_req_count
+        # Stats printing
         total_reqs += new_reqs
         new_queue_length = len(queue)
         queue_delta = new_queue_length - queue_length
