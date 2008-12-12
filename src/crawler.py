@@ -27,7 +27,7 @@ VISITED_PATH = os.path.normpath('../visited_users.pkl') # pickle
 SEED_USERS = (1000001, 2461197, 1021991)
 
 # Min time interval between reqs, 40 reqs/min by douban API TOS
-REQ_INTERVAL = 60.0/200
+REQ_INTERVAL = 60.0/40 * 0.8
 
 # max-results per page in douban API, currently API limit it to 50
 MAX_RESULTS = 50
@@ -119,7 +119,7 @@ class User:
                 except socket.error:
                     print "\t*** Connection time out, retry in 2 seconds"
                     time.sleep(2)
-            self._inc_req(count > 4)
+            self._inc_req(count > 2)
             entries.extend(f.entry)
             count += 1
             start_i += MAX_RESULTS
@@ -147,21 +147,16 @@ class User:
                                    rows)
 
     def store_relations(self):
+        new_friend_pairs = []
         for pair in self.friend_pairs:
             self.db_cursor.execute("SELECT count(*) FROM friends " +
-                                   "WHERE (user1=? AND user2=?) " +
-                                   "OR (user2=? AND user1=?)",
-                                   pair*2)
+                                   "WHERE user2=? AND user1=?", pair)
             if self.db_cursor.fetchone()[0] == 0:
-                self.db_cursor.execute("INSERT INTO friends VALUES (?, ?)",
-                                       pair)
-        for pair in self.contact_pairs:
-            self.db_cursor.execute("SELECT count(*) FROM follows " +
-                                   "WHERE from_user=? AND to_user=?",
-                                   pair)
-            if self.db_cursor.fetchone()[0] == 0:
-                self.db_cursor.execute("INSERT INTO follows VALUES (?, ?)",
-                                       pair)
+                new_friend_pairs.append(pair)
+        self.db_cursor.executemany("INSERT INTO friends VALUES (?, ?)",
+                                   new_friend_pairs)
+        self.db_cursor.executemany("INSERT INTO follows VALUES (?, ?)",
+                                   self.contact_pairs)
 
     def get_friends(self):
         self.db_cursor.execute('SELECT user2 FROM friends WHERE user1=?',
@@ -200,7 +195,6 @@ def main():
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         cursor.executescript(open_and_read(SQL_PATH))
-        conn.commit()
     else:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
@@ -276,8 +270,8 @@ def main():
         new_users = user_users - users_in_db
         user.store_users(new_users)
         user.store_relations()
-        users_in_db |= new_users
         conn.commit()
+        users_in_db |= new_users
         visited.add(curr_uid)
         queue.extend(new_users)
 
@@ -293,4 +287,5 @@ def main():
                user.data[1], user.data[3])
 
 if __name__ == "__main__":
-    main()
+    import cProfile
+    cProfile.run('main()', 'out')
