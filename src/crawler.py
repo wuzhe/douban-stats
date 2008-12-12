@@ -26,10 +26,10 @@ VISITED_PATH = os.path.normpath('../visited_users.pkl') # pickle
 
 SEED_USERS = (1000001, 2461197, 1021991) # seed UIDs
 REQ_CONTROL = True # control request frenquency or not
-REQ_INTERVAL = 60.0/40 # Minimun time interval between reqs, 40
-                       # reqs/min by douban API TOS
+REQ_INTERVAL = 60.0/(40+2) # Minimun interval between reqs, API TOS
+                           # says I can't req faster than 40 per min
 MAX_RESULTS = 50 # max-results per page in douban API, currently API
-                 # limit it to 50
+                 # limits it to 50
 TOTAL_USERS = 2000000 # Estimated number of user accounts in douban
 
 class User:
@@ -58,11 +58,11 @@ class User:
         self.contact_pairs = [] # actually means `follows' in database
         self.api_req_count = 0
 
-    def _inc_req(self, need_wait):
+    def _inc_req(self):
         self.api_req_count += 1
         if not REQ_CONTROL: return
         now = time.time()
-        if need_wait and (now - User.last_req_time) < REQ_INTERVAL:
+        if (now - User.last_req_time) < REQ_INTERVAL:
             sleep_time = REQ_INTERVAL - (now - User.last_req_time)
             print "\tzzZ\tSleep %s seconds" % sleep_time
             time.sleep(sleep_time)
@@ -75,13 +75,14 @@ class User:
             self.db_cursor.execute("INSERT INTO users VALUES " +
                                    "(?,?,?,?,?,?,?,DATETIME('NOW'))",
                                    self.data)
-    def _req_api(self, what, uri, need_wait=False):
+    def _req_api(self, what, uri):
         if what == 'people':
             getter = self.client.GetPeople
         elif what == 'friends':
             getter = self.client.GetFriends
         timeout = User.Sleep_Timeout_init
         banned = User.Sleep_Banned_init
+        self._inc_req()
         while True:
             try:
                 f = getter(uri)
@@ -97,7 +98,6 @@ class User:
                 banned *= 2
             else:
                 break
-        self._inc_req(need_wait)
         return f
 
     def get_data(self):
@@ -125,14 +125,11 @@ class User:
     def _get_userlist_from_api(self, what):
         entries = []
         start_i = 1
-        count = 0
         while start_i == 1 or len(f.entry) == 50:
             f = self._req_api('friends',
                               '/people/%s/%s?start-index=%s&max-results=%s' % \
-                              (self.uri_id, what, start_i, MAX_RESULTS),
-                              count > 2)
+                              (self.uri_id, what, start_i, MAX_RESULTS))
             entries.extend(f.entry)
-            count += 1
             start_i += MAX_RESULTS
 
         rows = []
@@ -263,24 +260,20 @@ def main():
         curr_uid = queue.popleft()
         if curr_uid in visited: continue
 
-        last = time.time()
-
         # API heavy operations
+        begin_time = time.time()
         user = User(cursor, client, curr_uid)
         uid = user.get_data()[0]
         users_in_db.add(uid)
         user_users = user.get_friends() | user.get_follows()
+        end_time = time.time()
 
         # Update the frequency stats
+        duration = end_time - begin_time
         new_reqs = user.api_req_count
-        now = time.time()
-        duration = now - last
-        # API request frequency (per min)
-        req_freq = int(float(new_reqs) / duration * 60)
-        # Visit frequency (per hour)
-        visit_freq = int(1.0 / duration * 3600)
-        # Estimated time remaining (in hours)
-        etr = int((TOTAL_USERS - len(visited)) / visit_freq)
+        req_freq = int(float(new_reqs) / duration * 60) # req per min
+        visit_freq = int(1.0 / duration * 3600) # visit per hour
+        etr = int((TOTAL_USERS - len(visited)) / visit_freq) # time left in hour
 
         # CPU heavy operations
         new_users = user_users - users_in_db
