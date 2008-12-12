@@ -4,7 +4,7 @@
 #
 
 import douban.service
-import os, sys, sqlite3, atexit, pickle, datetime, time
+import os, sys, sqlite3, atexit, pickle, datetime, time, socket
 from collections import deque
 
 def open_and_read(path):
@@ -86,7 +86,13 @@ class User:
             return self.data
 
         # If not in database, get it via API and save it in database
-        p = self.client.GetPeople('/people/%s' % self.uri_id)
+        while True:
+            try:
+                p = self.client.GetPeople('/people/%s' % self.uri_id)
+                break
+            except socket.error:
+                print "\t*** Connection time out, retry in 2 seconds"
+                time.sleep(2)
         self._inc_req()
         fields = []
         for field, getter in User.Mapper:
@@ -103,10 +109,16 @@ class User:
         start_i = 1
         count = 0
         while start_i == 1 or len(f.entry) == 50:
-            f = self.client.GetFriends(
-                '/people/%s/%s?start-index=%s&max-results=%s' %
-                (self.uri_id, what, start_i, MAX_RESULTS)
-                )
+            while True:
+                try:
+                    f = self.client.GetFriends(
+                        '/people/%s/%s?start-index=%s&max-results=%s' %
+                        (self.uri_id, what, start_i, MAX_RESULTS)
+                        )
+                    break
+                except socket.error:
+                    print "\t*** Connection time out, retry in 2 seconds"
+                    time.sleep(2)
             self._inc_req(count > 4)
             entries.extend(f.entry)
             count += 1
