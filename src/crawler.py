@@ -69,19 +69,19 @@ class User:
         now = time.time()
         if REQ_CONTROL and (now - User.last_req_time) < REQ_INTERVAL:
             sleep_time = REQ_INTERVAL - (now - User.last_req_time)
-            print "\t\tzzZ\tSleep %s seconds" % sleep_time
+            print " zzZ\tSleep %s seconds" % sleep_time
             time.sleep(sleep_time)
 
         while True:
             try:
                 f = getter(uri)
             except socket.error:
-                print "\t\t***\tConnection time out, retry in %s seconds" % \
+                print " ***\tConnection time out, retry in %s seconds" % \
                       timeout
                 time.sleep(timeout)
                 timeout *= 2
             except RequestError:
-                print "\t\t***\tI am banned by douban, retry in %s hours" % \
+                print " ***\tI am banned by douban, retry in %s hours" % \
                       (banned/3600.0)
                 time.sleep(banned)
                 banned *= 2
@@ -230,6 +230,7 @@ def main():
 
     # Set up the exit function
     def save_state(conn, cursor, queue, visited):
+        print "=" * 8
         print "Saving running state ..."
         if queue:
             pkl_file = open(USER_PATH, 'wb')
