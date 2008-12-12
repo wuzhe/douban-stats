@@ -32,6 +32,9 @@ MAX_RESULTS = 50 # max-results per page in douban API, currently API
                  # limits it to 50
 TOTAL_USERS = 2000000 # Estimated number of user accounts in douban
 
+def nowp():
+    return '[' + datetime.datetime.now().isoformat(' ') + ']'
+
 class User:
 
     # Map fields in `users' table to douban_python gdata api methods
@@ -69,19 +72,19 @@ class User:
         now = time.time()
         if REQ_CONTROL and (now - User.last_req_time) < REQ_INTERVAL:
             sleep_time = REQ_INTERVAL - (now - User.last_req_time)
-            print " zzZ\tSleep %s seconds" % sleep_time
+            print nowp() + " zzZ for %s seconds, to be polite" % sleep_time
             time.sleep(sleep_time)
 
         while True:
             try:
                 f = getter(uri)
             except socket.error:
-                print " ***\tConnection time out, retry in %s seconds" % \
+                print nowp() + " ** Connection timeout, retry in %s seconds" % \
                       timeout
                 time.sleep(timeout)
                 timeout *= 2
             except RequestError:
-                print " ***\tI am banned by douban, retry in %s hours" % \
+                print nowp() + " ** I am miserably banned, retry in %s hours" % \
                       (banned/3600.0)
                 time.sleep(banned)
                 banned *= 2
@@ -215,7 +218,8 @@ def main():
         curr_list = SEED_USERS
         queue = deque(curr_list)
     else:
-        print "Restoring running state ..."
+        print "Restoring running state from the previous run"
+        print "=" * 8
         pkl_file = open(USER_PATH, 'rb')
         queue = pickle.load(pkl_file)
         pkl_file.close()
@@ -243,7 +247,7 @@ def main():
         cursor.execute("SELECT count(*) FROM users")
         count = cursor.fetchone()[0]
         conn.close()
-        print "I have collected %d users so far." % count
+        print "Sir, I have collected %d users for you so far." % count
     atexit.register(save_state, conn, cursor, queue, visited)
 
     client = douban.service.DoubanService(api_key=APIKEY)
@@ -287,11 +291,10 @@ def main():
         new_queue_length = len(queue)
         queue_delta = new_queue_length - queue_length
         queue_length = new_queue_length
-        nowp = datetime.datetime.now().isoformat(' ')
-        print "[%s] V:%d Q:%d(%+d)\tDB:%d(%+d)\tREQ:%d(%+d)\tRF:%d\tVF:%d\tETR:%d\tU:%s(%s)" % \
-              (nowp, len(visited), queue_length, queue_delta, len(users_in_db),
-               len(new_users), total_reqs, new_reqs, req_freq, visit_freq, etr,
-               user.data[1], user.data[3])
+        print "%s V:%d Q:%d(%+d) D:%d(%+d) R:%d(%+d) RF:%d VF:%d ETR:%d U:%s(%s)" % \
+              (nowp(), len(visited), queue_length, queue_delta,
+               len(users_in_db), len(new_users), total_reqs, new_reqs, req_freq,
+               visit_freq, etr, user.data[1], user.data[3])
 
 if __name__ == "__main__":
     main()
