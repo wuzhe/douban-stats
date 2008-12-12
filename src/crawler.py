@@ -4,8 +4,9 @@
 #
 
 import douban.service
-import os, sys, sqlite3, atexit, pickle, datetime, time, socket
+import os, sys, sqlite3, atexit, pickle, datetime, time, socket, gdata
 from collections import deque
+from gdata.service import RequestError
 
 def open_and_read(path):
     f = open(path)
@@ -27,7 +28,7 @@ VISITED_PATH = os.path.normpath('../visited_users.pkl') # pickle
 SEED_USERS = (1000001, 2461197, 1021991)
 
 # Min time interval between reqs, 40 reqs/min by douban API TOS
-REQ_INTERVAL = 60.0/40 * 0.8
+REQ_INTERVAL = 60.0/40
 
 # max-results per page in douban API, currently API limit it to 50
 MAX_RESULTS = 50
@@ -46,6 +47,10 @@ class User:
               ('homepage', lambda x: x.link[3].href),
               ('description', lambda x: x.content.text))
 
+    Sleep_Timeout_init = 2 # 2 seconds
+    Sleep_Banned_init = 3600 + 5 # 1 hour, douban remove ban after 1 hour
+
+    last_req_time = 0
 
     def __init__(self, db_cursor, client, uri_id):
         self.db_cursor = db_cursor
@@ -56,16 +61,15 @@ class User:
         self.friend_pairs = []
         self.contact_pairs = [] # actually means `follows' in database
         self.api_req_count = 0
-        self.last_req_time = time.time() - 1
 
-    def _inc_req(self, need_sleep=False):
+    def _inc_req(self, need_wait):
         self.api_req_count += 1
         now = time.time()
-        if need_sleep and (now - self.last_req_time) < REQ_INTERVAL:
-            sleep_time = REQ_INTERVAL - (now - self.last_req_time)
-            print "\tzzZ: Sleep %s seconds" % sleep_time
+        if need_wait and (now - User.last_req_time) < REQ_INTERVAL:
+            sleep_time = REQ_INTERVAL - (now - User.last_req_time)
+            print "\tzzZ\tSleep %s seconds" % sleep_time
             time.sleep(sleep_time)
-        self.last_req_time = now
+        User.last_req_time = now
 
     def _store_userdata(self):
         self.db_cursor.execute("SELECT count(*) FROM users WHERE uid=?",
@@ -74,6 +78,30 @@ class User:
             self.db_cursor.execute("INSERT INTO users VALUES " +
                                    "(?,?,?,?,?,?,?,DATETIME('NOW'))",
                                    self.data)
+    def _req_api(self, what, uri, need_wait=False):
+        if what == 'people':
+            getter = self.client.GetPeople
+        elif what == 'friends':
+            getter = self.client.GetFriends
+        timeout = User.Sleep_Timeout_init
+        banned = User.Sleep_Banned_init
+        while True:
+            try:
+                f = getter(uri)
+            except socket.error:
+                print "\t***\tConnection time out, retry in %s seconds" % \
+                      timeout
+                time.sleep(timeout)
+                timeout *= 2
+            except RequestError:
+                print "\t***\tI am banned by douban, retry in %s hours" % \
+                      (banned/3600.0)
+                time.sleep(banned)
+                banned *= 2
+            else:
+                break
+        self._inc_req(need_wait)
+        return f
 
     def get_data(self):
         if self.data: return self.data
@@ -86,14 +114,7 @@ class User:
             return self.data
 
         # If not in database, get it via API and save it in database
-        while True:
-            try:
-                p = self.client.GetPeople('/people/%s' % self.uri_id)
-                break
-            except socket.error:
-                print "\t*** Connection time out, retry in 2 seconds"
-                time.sleep(2)
-        self._inc_req()
+        p = self._req_api('people', '/people/%s' % self.uri_id)
         fields = []
         for field, getter in User.Mapper:
             try:
@@ -109,17 +130,10 @@ class User:
         start_i = 1
         count = 0
         while start_i == 1 or len(f.entry) == 50:
-            while True:
-                try:
-                    f = self.client.GetFriends(
-                        '/people/%s/%s?start-index=%s&max-results=%s' %
-                        (self.uri_id, what, start_i, MAX_RESULTS)
-                        )
-                    break
-                except socket.error:
-                    print "\t*** Connection time out, retry in 2 seconds"
-                    time.sleep(2)
-            self._inc_req(count > 2)
+            f = self._req_api('friends',
+                              '/people/%s/%s?start-index=%s&max-results=%s' % \
+                              (self.uri_id, what, start_i, MAX_RESULTS),
+                              count > 2)
             entries.extend(f.entry)
             count += 1
             start_i += MAX_RESULTS
