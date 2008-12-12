@@ -292,5 +292,4 @@ def main():
                user.data[1], user.data[3])
 
 if __name__ == "__main__":
-    import cProfile
-    cProfile.run('main()', 'out')
+    main()
