@@ -63,7 +63,7 @@ class User:
         now = time.time()
         if need_sleep and (now - self.last_req_time) < REQ_INTERVAL:
             sleep_time = REQ_INTERVAL - (now - self.last_req_time)
-            print "    zzZ: Sleep %s seconds" % sleep_time
+            print "\tzzZ: Sleep %s seconds" % sleep_time
             time.sleep(sleep_time)
         self.last_req_time = now
 
@@ -195,9 +195,12 @@ def main():
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         cursor.executescript(open_and_read(SQL_PATH))
+        conn.commit()
     else:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
+    cursor.execute("PRAGMA cache_size = 20000;")
+    cursor.execute("PRAGMA synchronous = NORMAL;")
 
     # Get the user list to crawl
     if not os.path.exists(USER_PATH):
