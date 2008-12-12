@@ -24,17 +24,13 @@ DB_PATH = os.path.normpath('../data.db') # sqlite3 database
 USER_PATH = os.path.normpath('../user_queue.pkl') # pickle
 VISITED_PATH = os.path.normpath('../visited_users.pkl') # pickle
 
-# Seed users
-SEED_USERS = (1000001, 2461197, 1021991)
-
-# Min time interval between reqs, 40 reqs/min by douban API TOS
-REQ_INTERVAL = 60.0/40
-
-# max-results per page in douban API, currently API limit it to 50
-MAX_RESULTS = 50
-
-# Estimated number of user accounts in douban
-TOTAL_USERS = 2000000
+SEED_USERS = (1000001, 2461197, 1021991) # seed UIDs
+REQ_CONTROL = True # control request frenquency or not
+REQ_INTERVAL = 60.0/40 # Minimun time interval between reqs, 40
+                       # reqs/min by douban API TOS
+MAX_RESULTS = 50 # max-results per page in douban API, currently API
+                 # limit it to 50
+TOTAL_USERS = 2000000 # Estimated number of user accounts in douban
 
 class User:
 
@@ -48,8 +44,8 @@ class User:
               ('description', lambda x: x.content.text))
 
     Sleep_Timeout_init = 2 # 2 seconds
-    Sleep_Banned_init = 3600 + 5 # 1 hour, douban remove ban after 1 hour
-
+    Sleep_Banned_init = 3600 + 5 # retry in 1 hour, douban remove ban
+                                 # after 1 hour
     last_req_time = 0
 
     def __init__(self, db_cursor, client, uri_id):
@@ -64,6 +60,7 @@ class User:
 
     def _inc_req(self, need_wait):
         self.api_req_count += 1
+        if not REQ_CONTROL: return
         now = time.time()
         if need_wait and (now - User.last_req_time) < REQ_INTERVAL:
             sleep_time = REQ_INTERVAL - (now - User.last_req_time)
