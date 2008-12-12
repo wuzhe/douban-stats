@@ -58,10 +58,10 @@ class User:
         self.api_req_count = 0
         self.last_req_time = time.time() - 1
 
-    def _inc_req(self):
+    def _inc_req(self, need_sleep=False):
         self.api_req_count += 1
         now = time.time()
-        if (now - self.last_req_time) < REQ_INTERVAL:
+        if need_sleep and (now - self.last_req_time) < REQ_INTERVAL:
             sleep_time = REQ_INTERVAL - (now - self.last_req_time)
             print "    zzZ: Sleep %s seconds" % sleep_time
             time.sleep(sleep_time)
@@ -101,13 +101,15 @@ class User:
     def _get_userlist_from_api(self, what):
         entries = []
         start_i = 1
+        count = 0
         while start_i == 1 or len(f.entry) == 50:
             f = self.client.GetFriends(
                 '/people/%s/%s?start-index=%s&max-results=%s' %
                 (self.uri_id, what, start_i, MAX_RESULTS)
                 )
-            self._inc_req()
+            self._inc_req(count > 4)
             entries.extend(f.entry)
+            count += 1
             start_i += MAX_RESULTS
 
         rows = []
