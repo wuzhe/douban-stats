@@ -26,7 +26,7 @@ VISITED_PATH = os.path.normpath('../visited_users.pkl') # pickle
 
 SEED_USERS = (1000001, 2461197, 1021991) # seed UIDs
 REQ_CONTROL = True # control request frenquency or not
-REQ_INTERVAL = 60.0/(40+2) # Minimun interval between reqs, API TOS
+REQ_INTERVAL = 60.0/(40-2) # Minimum interval between reqs, API TOS
                            # says I can't req faster than 40 per min
 MAX_RESULTS = 50 # max-results per page in douban API, currently API
                  # limits it to 50
@@ -68,13 +68,6 @@ class User:
             time.sleep(sleep_time)
         User.last_req_time = now
 
-    def _store_userdata(self):
-        self.db_cursor.execute("SELECT count(*) FROM users WHERE uid=?",
-                               (self.data[0],))
-        if not self.db_cursor.fetchone()[0]:
-            self.db_cursor.execute("INSERT INTO users VALUES " +
-                                   "(?,?,?,?,?,?,?,DATETIME('NOW'))",
-                                   self.data)
     def _req_api(self, what, uri):
         if what == 'people':
             getter = self.client.GetPeople
@@ -99,28 +92,6 @@ class User:
             else:
                 break
         return f
-
-    def get_data(self):
-        if self.data: return self.data
-
-        self.db_cursor.execute("SELECT * FROM users WHERE uid=? OR uid_text=?",
-                               (self.uri_id, str(self.uri_id)))
-        row = self.db_cursor.fetchone()
-        if row:
-            self.data = row
-            return self.data
-
-        # If not in database, get it via API and save it in database
-        p = self._req_api('people', '/people/%s' % self.uri_id)
-        fields = []
-        for field, getter in User.Mapper:
-            try:
-                fields.append(getter(p))
-            except (AttributeError, IndexError):
-                fields.append(None)
-        self.data = fields
-        self._store_userdata()
-        return self.data
 
     def _get_userlist_from_api(self, what):
         entries = []
@@ -147,6 +118,36 @@ class User:
         vars(self)[what[:-1] + '_pairs'] = \
                       zip((self.get_data()[0],) * len(uid_list), uid_list)
         return set(uid_list)
+
+    def _store_userdata(self):
+        self.db_cursor.execute("SELECT count(*) FROM users WHERE uid=?",
+                               (self.data[0],))
+        if not self.db_cursor.fetchone()[0]:
+            self.db_cursor.execute("INSERT INTO users VALUES " +
+                                   "(?,?,?,?,?,?,?,DATETIME('NOW'))",
+                                   self.data)
+
+    def get_data(self):
+        if self.data: return self.data
+
+        self.db_cursor.execute("SELECT * FROM users WHERE uid=? OR uid_text=?",
+                               (self.uri_id, str(self.uri_id)))
+        row = self.db_cursor.fetchone()
+        if row:
+            self.data = row
+            return self.data
+
+        # If not in database, get it via API and save it in database
+        p = self._req_api('people', '/people/%s' % self.uri_id)
+        fields = []
+        for field, getter in User.Mapper:
+            try:
+                fields.append(getter(p))
+            except (AttributeError, IndexError):
+                fields.append(None)
+        self.data = fields
+        self._store_userdata()
+        return self.data
 
     def store_users(self, uids):
         rows = filter(lambda x: x[0] in uids, self.rows_store.values())
@@ -216,6 +217,7 @@ def main():
         curr_list = SEED_USERS
         queue = deque(curr_list)
     else:
+        print "Restoring running state ..."
         pkl_file = open(USER_PATH, 'rb')
         queue = pickle.load(pkl_file)
         pkl_file.close()
@@ -230,15 +232,12 @@ def main():
 
     # Set up the exit function
     def save_state(conn, cursor, queue, visited):
+        print "Saving running state ..."
         if queue:
-            print 'Saving user queue (length: %s) in "%s"' % \
-                  (len(queue), USER_PATH)
             pkl_file = open(USER_PATH, 'wb')
             pickle.dump(queue, pkl_file)
             pkl_file.close()
         if visited:
-            print 'Saving visited set (length: %s) in "%s"' % \
-                  (len(visited), VISITED_PATH)
             pkl_file = open(VISITED_PATH, 'wb')
             pickle.dump(visited, pkl_file)
             pkl_file.close()
@@ -268,13 +267,6 @@ def main():
         user_users = user.get_friends() | user.get_follows()
         end_time = time.time()
 
-        # Update the frequency stats
-        duration = end_time - begin_time
-        new_reqs = user.api_req_count
-        req_freq = int(float(new_reqs) / duration * 60) # req per min
-        visit_freq = int(1.0 / duration * 3600) # visit per hour
-        etr = int((TOTAL_USERS - len(visited)) / visit_freq) # time left in hour
-
         # CPU heavy operations
         new_users = user_users - users_in_db
         user.store_users(new_users)
@@ -283,6 +275,13 @@ def main():
         users_in_db |= new_users
         visited.add(curr_uid)
         queue.extend(new_users)
+
+        # Update the frequency stats
+        duration = end_time - begin_time
+        new_reqs = user.api_req_count
+        req_freq = int(float(new_reqs) / duration * 60) # reqs per min
+        visit_freq = int(1.0 / duration * 3600) # visit per hour
+        etr = int((TOTAL_USERS - len(visited)) / visit_freq) # estimated hours left
 
         # Stats printing
         total_reqs += new_reqs
