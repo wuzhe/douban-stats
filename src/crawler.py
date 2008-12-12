@@ -26,8 +26,8 @@ VISITED_PATH = os.path.normpath('../visited_users.pkl') # pickle
 
 SEED_USERS = (1000001, 2461197, 1021991) # seed UIDs
 REQ_CONTROL = True # control request frenquency or not
-REQ_INTERVAL = 60.0/(40-2) # Minimum interval between reqs, API TOS
-                           # says I can't req faster than 40 per min
+REQ_INTERVAL = 60.0/40 # Minimum interval between reqs, API TOS says I
+                       # can't req faster than 40 per min
 MAX_RESULTS = 50 # max-results per page in douban API, currently API
                  # limits it to 50
 TOTAL_USERS = 2000000 # Estimated number of user accounts in douban
@@ -58,16 +58,6 @@ class User:
         self.contact_pairs = [] # actually means `follows' in database
         self.api_req_count = 0
 
-    def _inc_req(self):
-        self.api_req_count += 1
-        if not REQ_CONTROL: return
-        now = time.time()
-        if (now - User.last_req_time) < REQ_INTERVAL:
-            sleep_time = REQ_INTERVAL - (now - User.last_req_time)
-            print "\tzzZ\tSleep %s seconds" % sleep_time
-            time.sleep(sleep_time)
-        User.last_req_time = now
-
     def _req_api(self, what, uri):
         if what == 'people':
             getter = self.client.GetPeople
@@ -75,22 +65,30 @@ class User:
             getter = self.client.GetFriends
         timeout = User.Sleep_Timeout_init
         banned = User.Sleep_Banned_init
-        self._inc_req()
+
+        now = time.time()
+        if REQ_CONTROL and (now - User.last_req_time) < REQ_INTERVAL:
+            sleep_time = REQ_INTERVAL - (now - User.last_req_time)
+            print "\t\tzzZ\tSleep %s seconds" % sleep_time
+            time.sleep(sleep_time)
+
         while True:
             try:
                 f = getter(uri)
             except socket.error:
-                print "\t***\tConnection time out, retry in %s seconds" % \
+                print "\t\t***\tConnection time out, retry in %s seconds" % \
                       timeout
                 time.sleep(timeout)
                 timeout *= 2
             except RequestError:
-                print "\t***\tI am banned by douban, retry in %s hours" % \
+                print "\t\t***\tI am banned by douban, retry in %s hours" % \
                       (banned/3600.0)
                 time.sleep(banned)
                 banned *= 2
             else:
                 break
+        User.last_req_time = time.time()
+        self.api_req_count += 1
         return f
 
     def _get_userlist_from_api(self, what):
@@ -279,8 +277,8 @@ def main():
         # Update the frequency stats
         duration = end_time - begin_time
         new_reqs = user.api_req_count
-        req_freq = int(float(new_reqs) / duration * 60) # reqs per min
-        visit_freq = int(1.0 / duration * 3600) # visit per hour
+        req_freq = int(60.0 * new_reqs / duration) # reqs per min
+        visit_freq = int(3600.0 / duration) # visit per hour
         etr = int((TOTAL_USERS - len(visited)) / visit_freq) # estimated hours left
 
         # Stats printing
