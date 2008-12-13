@@ -46,7 +46,7 @@ class User:
               ('homepage', lambda x: x.link[3].href),
               ('description', lambda x: x.content.text))
 
-    Sleep_Timeout_init = 2 # 2 seconds
+    Sleep_Timeout_init = 10 # 2 seconds
     Sleep_Banned_init = 3600 + 5 # retry in 1 hour, douban remove ban
                                  # after 1 hour
     last_req_time = 0
@@ -66,15 +66,16 @@ class User:
             getter = self.client.GetPeople
         elif what == 'friends':
             getter = self.client.GetFriends
-        timeout = User.Sleep_Timeout_init
-        banned = User.Sleep_Banned_init
 
+        # Sleep if request too fast
         now = time.time()
         if REQ_CONTROL and (now - User.last_req_time) < REQ_INTERVAL:
             sleep_time = REQ_INTERVAL - (now - User.last_req_time)
             print nowp() + " zzZ for %s seconds, to be polite" % sleep_time
             time.sleep(sleep_time)
 
+        timeout = User.Sleep_Timeout_init
+        banned = User.Sleep_Banned_init
         while True:
             try:
                 f = getter(uri)
@@ -284,7 +285,9 @@ def main():
         new_reqs = user.api_req_count
         req_freq = int(60.0 * new_reqs / duration) # reqs per min
         visit_freq = int(3600.0 / duration) # visit per hour
-        etr = int((TOTAL_USERS - len(visited)) / visit_freq) # estimated hours left
+        # estimated time remaining
+        etr = int((TOTAL_USERS - len(visited)) / visit_freq) \
+              if visit_freq != 0 else sys.maxint
 
         # Stats printing
         total_reqs += new_reqs
