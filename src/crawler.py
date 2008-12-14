@@ -4,7 +4,7 @@
 #
 
 import douban.service
-import os, sys, sqlite3, atexit, pickle, datetime, time, socket, gdata
+import os, sys, sqlite3, atexit, pickle, datetime, time, socket, gdata, signal
 from collections import deque
 from gdata.service import RequestError
 
@@ -26,14 +26,21 @@ VISITED_PATH = os.path.normpath('../visited_users.pkl') # pickle
 
 SEED_USERS = (1000001, 2461197, 1021991) # seed UIDs
 REQ_CONTROL = True # control request frenquency or not
-REQ_INTERVAL = 60.0/40 # Minimum interval between reqs, API TOS says I
+REQ_INTERVAL = 60.0/100 # Minimum interval between reqs, API TOS says I
                        # can't req faster than 40 per min
 MAX_RESULTS = 50 # max-results per page in douban API, currently API
                  # limits it to 50
 TOTAL_USERS = 2000000 # Estimated number of user accounts in douban
+TIMEOUT_LIMIT = 10
 
 def nowp():
     return '[' + datetime.datetime.now().isoformat(' ') + ']'
+
+class TimeoutError(Exception): pass
+
+def signal_handler(signum, frame):
+    raise TimeoutError()
+signal.signal(signal.SIGALRM, signal_handler)
 
 class User:
 
@@ -46,7 +53,7 @@ class User:
               ('homepage', lambda x: x.link[3].href),
               ('description', lambda x: x.content.text))
 
-    Sleep_Timeout_init = 10 # 2 seconds
+    Sleep_Timeout_init = 2 # 2 seconds
     Sleep_Banned_init = 3600 + 5 # retry in 1 hour, douban remove ban
                                  # after 1 hour
     last_req_time = 0
@@ -77,9 +84,10 @@ class User:
         timeout = User.Sleep_Timeout_init
         banned = User.Sleep_Banned_init
         while True:
+            signal.alarm(TIMEOUT_LIMIT)
             try:
                 f = getter(uri)
-            except socket.error:
+            except (TimeoutError, socket.error):
                 print nowp() + " ** Connection timeout, retry in %s seconds" % \
                       timeout
                 time.sleep(timeout)
@@ -91,6 +99,8 @@ class User:
                 banned *= 2
             else:
                 break
+            finally:
+                signal.alarm(0) # disable the alarm
         User.last_req_time = time.time()
         self.api_req_count += 1
         return f
