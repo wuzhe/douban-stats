@@ -26,7 +26,7 @@ VISITED_PATH = os.path.normpath('../visited_users.pkl') # pickle
 
 SEED_USERS = (1000001, 2461197, 1021991) # seed UIDs
 REQ_CONTROL = True # control request frenquency or not
-REQ_INTERVAL = 60.0/100 # Minimum interval between reqs, API TOS says I
+REQ_INTERVAL = 60.0/42 # Minimum interval between reqs, API TOS says I
                        # can't req faster than 40 per min
 MAX_RESULTS = 50 # max-results per page in douban API, currently API
                  # limits it to 50
