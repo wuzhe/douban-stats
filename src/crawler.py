@@ -90,17 +90,19 @@ class User:
             except (TimeoutError, socket.error):
                 print nowp() + " ** Connection timeout, retry in %s seconds" % \
                       timeout
+                signal.alarm(0) # disable the alarm
                 time.sleep(timeout)
                 timeout *= 2
             except RequestError:
                 print nowp() + " ** I am miserably banned, retry in %s hours" % \
                       (banned/3600.0)
+                signal.alarm(0)
                 time.sleep(banned)
                 banned *= 2
             else:
                 break
             finally:
-                signal.alarm(0) # disable the alarm
+                signal.alarm(0)
         User.last_req_time = time.time()
         self.api_req_count += 1
         return f
